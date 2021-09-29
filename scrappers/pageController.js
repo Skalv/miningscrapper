@@ -5,14 +5,14 @@ async function scrapeAll(browserInstance) {
   try {
     browser = await browserInstance;
     const scrapedData = await pageScraper.scraper(browser);
-    console.log(scrapedData)
+    // console.log(scrapedData)
     await browser.close()
-    // fs.writeFile("data.json", JSON.stringify(scrapedData), 'utf8', function (err) {
-    //   if (err) {
-    //     return console.log(err);
-    //   }
-    //   console.log("The data has been scraped and saved successfully! View it at './data.json'");
-    // });
+    fs.writeFile("data.json", JSON.stringify(scrapedData), 'utf8', function (err) {
+      if (err) {
+        return console.log(err);
+      }
+      console.log("The data has been scraped and saved successfully! View it at './data.json'");
+    });
   }
   catch (err) {
     console.log("Could not resolve the browser instance => ", err);
