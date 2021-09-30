@@ -19,7 +19,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(cg, i) in jobs" :key="i">
+            <tr v-for="(cg, i) in cards" :key="i">
               <td>
                 <a :href="cg.link">{{ cg.name }}</a>
               </td>
@@ -45,13 +45,13 @@ export default {
     },
   },
   async asyncData({ store }) {
-    const getJobs = store.getters['job/getJobs']
-    let jobs = getJobs()
-    if (!jobs.length) {
-      jobs = await store.dispatch('job/getJobs')
+    const getCards = store.getters['card/getCards']
+    let cards = getCards()
+    if (cards.length === 0) {
+      cards = await store.dispatch('card/getCards')
     }
 
-    return { jobs }
+    return { cards }
   },
   data() {
     return {
