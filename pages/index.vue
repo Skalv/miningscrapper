@@ -114,15 +114,15 @@ export default {
   },
   computed: {
     detailedCards() {
-      return _.filter(this.cards, (card) => card.goodPrice)
+      return _.filter(this.cards, (card) => {
+        return card.goodPrice && card.details
+      })
     },
   },
   mounted() {
-    console.log('ICI')
-    this.syncdatas()
-    // window.setInterval(() => {
-    //   this.syncdatas()
-    // }, 10000)
+    window.setInterval(() => {
+      this.syncdatas()
+    }, 10000)
   },
   methods: {
     async syncdatas() {
