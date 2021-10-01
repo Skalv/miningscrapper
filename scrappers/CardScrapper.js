@@ -1,9 +1,35 @@
 const puppeteer = require('puppeteer')
-// let browser, page
 
-class CardScrapper {
+module.exports = class CardScrapper {
 
-  async startBrowser(Url) {
+  constructor() {
+    this.mainUrl = "https://www.hashrate.no/"
+    this.cards = []
+    this.lastUpdate = null
+    this.gpuPrices = null
+    this.scrapAll()
+    setInterval(() => {
+      this.scrapAll()
+    }, 10 * 60000)
+
+  }
+
+  async scrapAll() {
+    console.log("Start loading cards")
+    await this.startBrowser()
+    this.getCardsPrice()
+
+    this.cards = await this.getCardList()
+
+    for (let i = 0; i < this.cards.length; i++) {
+      this.cards[i].details = await this.getCardDetails(this.cards[i].link)
+    }
+
+    await this.closeBrowser()
+    this.lastUpdate = new Date()
+  }
+
+  async startBrowser() {
     this.browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -19,11 +45,17 @@ class CardScrapper {
     })
 
     this.page = await this.browser.newPage()
-    return await this.page.goto(Url, { waitUntil: 'networkidle2' }).catch(() => { })
+  }
+
+  async closeBrowser() {
+    await this.page.close()
+    this.page = null
+    await this.browser.close()
+    this.browser = null
   }
 
   async getCardList() {
-    await this.startBrowser("https://www.hashrate.no/")
+    await this.page.goto(this.mainUrl, { waitUntil: 'networkidle2' }).catch(() => { })
     await this.page.waitForSelector('table.sortable.w3-table').catch(() => { })
 
     const cgs = await this.page.$$eval('tbody > tr.w3-border-bottom', rows => {
@@ -39,13 +71,11 @@ class CardScrapper {
       })
     })
 
-    await this.browser.close()
-
     return cgs
   }
 
   async getCardDetails(link) {
-    await this.startBrowser(link)
+    await this.page.goto(link, { waitUntil: 'networkidle2' }).catch(() => { })
     await this.page.waitForSelector('table.sortable').catch(() => { })
 
     const details = await this.page.$eval('table.sortable > tbody', el => {
@@ -64,14 +94,25 @@ class CardScrapper {
       })
       return datas
     })
-    await this.page.close()
 
     return details
   }
-}
 
+  async getCardsPrice() {
+    console.log("Récupération des prix")
 
-export default function ({ app }, inject) {
-  const scrapper = new CardScrapper()
-  inject('cardScrapper', scrapper)
+    const pricePage = await this.browser.newPage()
+    await pricePage.goto('https://dropreference.com/#/home/gpu', { waitUntil: 'networkidle2' })
+    await pricePage.waitForSelector('.scrollable-content > .card-drop')
+
+    pricePage.on('response', async res => {
+      if (res.url() === "https://api-dropreference.com/items/gpu") {
+        const datas = await res.text()
+        this.gpuPrices = JSON.parse(datas)
+        console.log("Prix des cartes récupéré")
+      }
+    })
+
+    pricePage.$eval('p.mat-tooltip-trigger.item-name', el => el.click())
+  }
 }
