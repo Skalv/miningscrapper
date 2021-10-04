@@ -2,86 +2,105 @@
   <div class="container">
     <div class="row">
       <div class="col">
-        <div class="d-flex w-100 justify-content-between">
+        <div class="d-flex w-100 justify-content-between align-items-center">
           <h2>Cartes Master</h2>
-          <p v-if="lastUpdate">{{ lastUpdate }}</p>
-          <p v-else>Pas encore totalement synchro</p>
+          <nuxt-link :to="'/list'" class="btn btn-primary">Liste</nuxt-link>
+          <nuxt-link :to="'/builder'" class="btn btn-primary">
+            Builder
+          </nuxt-link>
         </div>
       </div>
     </div>
     <div class="row">
       <div class="col">
-        <div class="list-group">
-          <div
-            v-for="(card, i) in detailedCards"
-            :key="i"
-            class="list-group-item"
+        <div class="form-group">
+          <label for="cardSelect">Sélectionner une carte :</label>
+          <select
+            id="cardSelect"
+            v-model="selectedCard"
+            class="form-control"
+            name="cardSelect"
           >
-            <div class="row">
-              <div class="col-auto">
-                <img
-                  v-if="card.img"
-                  style="height: 80px; margin-right: 1em"
-                  class="img-fluid"
-                  :src="card.img"
-                />
-              </div>
-              <div class="col">
-                <div class="d-flex justify-content-between w-100">
-                  <h5>{{ card.name }}</h5>
-                  <p v-if="card.goodPrice">+/- ${{ card.goodPrice }}</p>
-                </div>
-                <div
-                  v-if="card.best"
-                  class="d-flex justify-content-between w-100"
-                >
-                  <p>
-                    {{ card.best.coin }} ({{ card.best.hashrate }} @
-                    {{ card.best.power }}) => {{ card.best.estReward }} days ({{
-                      card.best.estReward | calculateMonthRwd
-                    }}/month)
-                  </p>
-                  <p>
-                    <b>ROI : {{ card.best.estReward | calculateROI(card) }}</b>
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div class="row">
-              <div class="col">
-                <b-button v-b-toggle="`card${i}`">Details</b-button>
-              </div>
-            </div>
-            <div class="row">
-              <b-collapse :id="`card${i}`" class="col">
-                <table v-if="card.details" class="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Coin</th>
-                      <th>Hashrate</th>
-                      <th>Power</th>
-                      <th>Reward/jours</th>
-                      <th>Reward/mois</th>
-                      <th>ROI</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="coinDetail in card.details"
-                      :key="coinDetail.coin"
-                    >
-                      <td>{{ coinDetail.coin }}</td>
-                      <td>{{ coinDetail.hashrate }}</td>
-                      <td>{{ coinDetail.power }}</td>
-                      <td>{{ coinDetail.estReward }}</td>
-                      <td>{{ coinDetail.estReward | calculateMonthRwd }}</td>
-                      <td>{{ coinDetail.estReward | calculateROI(card) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <p v-else>Donnés pas encore chargées</p>
-              </b-collapse>
-            </div>
+            <option v-for="(card, i) in cardList" :key="i" :value="card">
+              {{ card.name }}
+            </option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div v-if="calculator" class="row">
+      <div class="col">
+        <div class="row">
+          <div class="col">
+            <h2>Calcul pour {{ selectedCard.name }}</h2>
+            <p>
+              Prix : {{ selectedCard.goodPrice }}$ // Hash :
+              {{ selectedCard.best.hashrate }}({{ selectedCard.best.coin }}) //
+              Power : {{ selectedCard.best.power }} // estReward :
+              {{ selectedCard.best.estReward }}/days
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="form-group col">
+            <label for="nbCardStart">Nombre de carte au départ</label>
+            <input
+              id="nbCardStart"
+              v-model="nbCardStart"
+              class="form-control"
+              type="number"
+            />
+          </div>
+          <div class="form-group col">
+            <label for="nbCardMax">Nombre maximum de carte</label>
+            <input
+              id="nbCardMax"
+              v-model="nbCardMax"
+              class="form-control"
+              type="number"
+            />
+          </div>
+          <div class="form-group col">
+            <label for="nbMonth">Nombre de mois pour le calcul</label>
+            <input
+              id="nbMonth"
+              v-model="nbMonth"
+              class="form-control"
+              type="number"
+            />
+          </div>
+          <div class="form-group col">
+            <label for="otherCards">Gains depuis autres cartes</label>
+            <input
+              id="otherCards"
+              v-model="otherCards"
+              class="form-control"
+              type="number"
+            />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>NB Carte</th>
+                  <th>Gains du mois</th>
+                  <th>Total cumulé</th>
+                  <th>Combien on rachète ?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, i) in calculator" :key="i">
+                  <td>{{ row.date }}</td>
+                  <td>{{ row.nbCard }}</td>
+                  <td>${{ row.monthReward }}</td>
+                  <td>${{ row.cumulate }}</td>
+                  <td>{{ row.buyAnother }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -91,72 +110,97 @@
 
 <script>
 const _ = require('lodash')
+const moment = require('moment')
+moment.locale('fr')
+
 export default {
-  filters: {
-    calculateMonthRwd(est) {
-      const value = +est.slice(1, est.length)
-      return `$${(value * 30.41).toFixed(2)}`
-    },
-    calculateROI(estReward, card) {
-      if (card.goodPrice) {
-        const reward = +estReward.slice(1)
-        return `${(+card.goodPrice / reward).toFixed()} days`
-      } else {
-        return 'N/A'
-      }
-    },
-  },
   data() {
     return {
       cards: [],
-      lastUpdate: null,
+      selectedCard: null,
+      calculator: null,
+      nbCardStart: 2,
+      nbCardMax: 16,
+      nbMonth: 12,
+      otherCards: 0,
     }
   },
+  async fetch() {
+    const { cards } = await this.$axios.$get('http://localhost:3001/')
+
+    this.cards = cards
+  },
   computed: {
-    detailedCards() {
+    cardList() {
       return _.filter(this.cards, (card) => {
         return card.goodPrice && card.details
       })
     },
   },
-  mounted() {
-    window.setInterval(() => {
-      this.syncdatas()
-    }, 10000)
+  watch: {
+    selectedCard() {
+      if (this.selectedCard) {
+        this.calculate()
+      }
+    },
+    nbCardStart() {
+      this.calculate()
+    },
+    nbCardMax() {
+      this.calculate()
+    },
+    nbMonth() {
+      this.calculate()
+    },
+    otherCards() {
+      this.calculate()
+    },
   },
   methods: {
-    async syncdatas() {
-      const datas = await this.$axios.$get('http://localhost:3001/')
-      // this.cards = datas.cards
-      this.lastUpdate = datas.lastUpdate
+    calculate() {
+      let cumulate = 0
+      const startNow = moment()
+      const calculatedMonth = moment()
+      let nbCard = +this.nbCardStart
+      this.calculator = []
 
-      this.cards = _.map(datas.cards, (card) => {
-        const decomposedName = card.name.split(' ')
-        const constructor = decomposedName[0]
-        const reference = card.name
-          .substring(constructor.length)
-          .replaceAll(' ', '')
+      const cardReward = +this.selectedCard.best.estReward.slice(1)
 
-        const prices = _.find(datas.prices, (gpu) => {
-          return gpu.label.replaceAll(' ', '') === reference
+      while (calculatedMonth.diff(startNow, 'months') < this.nbMonth) {
+        const monthReward = +(
+          nbCard * cardReward * 30.41 +
+          +this.otherCards
+        ).toFixed(2)
+        cumulate += monthReward
+        const buyAnother =
+          cumulate >= this.selectedCard.goodPrice && nbCard < this.nbCardMax
+
+        this.calculator.push({
+          date: calculatedMonth.format('MM-YYYY'),
+          nbCard,
+          monthReward,
+          cumulate: cumulate.toFixed(2),
+          buyAnother: buyAnother
+            ? `Oui (${Math.floor(cumulate / this.selectedCard.goodPrice)})`
+            : 'Non',
         })
 
-        if (prices) {
-          card.goodPrice = (+prices.goodPrice * 1.16).toFixed(2)
-          card.img = prices.img
+        if (buyAnother && nbCard < this.nbCardMax) {
+          let many = Math.floor(cumulate / this.selectedCard.goodPrice)
+          const reste = cumulate % this.selectedCard.goodPrice
+
+          if (many > this.nbCardMax - nbCard) {
+            many = this.nbCardMax - nbCard
+            nbCard += many
+            cumulate -= many * this.selectedCard.goodPrice
+          } else {
+            cumulate = reste
+            nbCard += many
+          }
         }
 
-        card.best = null
-        if (card.details) {
-          _.each(card.details, (detail) => {
-            if (!card.best || card.best.estReward < detail.estReward) {
-              card.best = detail
-            }
-          })
-        }
-
-        return card
-      })
+        calculatedMonth.add(1, 'month')
+      }
     },
   },
 }

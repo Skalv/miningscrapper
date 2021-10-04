@@ -1,6 +1,9 @@
 const puppeteer = require('puppeteer')
+const _ = require('lodash')
 
 module.exports = class CardScrapper {
+
+  LHR = ['RTX3080LHR', 'RTX3070LHR', 'RTX3060TiLHR', 'RTX3060LHRv2']
 
   constructor() {
     this.mainUrl = "https://www.hashrate.no/"
@@ -15,14 +18,17 @@ module.exports = class CardScrapper {
   }
 
   async scrapAll() {
-    console.log("Start loading cards")
     await this.startBrowser()
-    this.getCardsPrice()
 
+    this.gpuPrices = await this.getCardsPrice()
     this.cards = await this.getCardList()
 
     for (let i = 0; i < this.cards.length; i++) {
-      this.cards[i].details = await this.getCardDetails(this.cards[i].link)
+      const details = await this.getCardDetails(this.cards[i].link)
+
+      this.cards[i].details = details
+      this.cards[i].best = this.getCardBest(details)
+      this.cards[i].goodPrice = this.getGoodPrice(this.cards[i])
     }
 
     await this.closeBrowser()
@@ -31,7 +37,7 @@ module.exports = class CardScrapper {
 
   async startBrowser() {
     this.browser = await puppeteer.launch({
-      headless: true,
+      headless: false,
       args: [
         '--no-sandbox',
         '--disable-setui-sandbox',
@@ -58,7 +64,7 @@ module.exports = class CardScrapper {
     await this.page.goto(this.mainUrl, { waitUntil: 'networkidle2' }).catch(() => { })
     await this.page.waitForSelector('table.sortable.w3-table').catch(() => { })
 
-    const cgs = await this.page.$$eval('tbody > tr.w3-border-bottom', rows => {
+    const cgs = await this.page.$$eval('.w3-hide-small.w3-hide-large > center > table > tbody > tr.w3-border-bottom', rows => {
       return rows.map(el => {
         return {
           name: el.querySelector('.list > a').textContent,
@@ -99,20 +105,59 @@ module.exports = class CardScrapper {
   }
 
   async getCardsPrice() {
-    console.log("Récupération des prix")
-
     const pricePage = await this.browser.newPage()
     await pricePage.goto('https://dropreference.com/#/home/gpu', { waitUntil: 'networkidle2' })
     await pricePage.waitForSelector('.scrollable-content > .card-drop')
 
-    pricePage.on('response', async res => {
-      if (res.url() === "https://api-dropreference.com/items/gpu") {
-        const datas = await res.text()
-        this.gpuPrices = JSON.parse(datas)
-        console.log("Prix des cartes récupéré")
+    return new Promise((resolve) => {
+      pricePage.on('response', async res => {
+        if (res.url() === "https://api-dropreference.com/items/gpu") {
+          const datas = await res.text()
+
+          resolve(JSON.parse(datas))
+        }
+      })
+
+      pricePage.$eval('p.mat-tooltip-trigger.item-name', el => el.click())
+    })
+  }
+
+  getCardBest(details) {
+    let best = null
+    _.each(details, (detail) => {
+      if (!best || best.estReward < detail.estReward) {
+        best = detail
       }
     })
 
-    pricePage.$eval('p.mat-tooltip-trigger.item-name', el => el.click())
+    return best
+
+  }
+
+  getGoodPrice(card) {
+    const decomposedName = card.name.split(' ')
+    const constructor = decomposedName[0]
+    let reference = card.name
+      .substring(constructor.length)
+      .replace(/ /g, '')
+
+    if (_.indexOf(this.LHR, reference) >= 0) {
+      reference = reference.replace(/LHR/g, '')
+      reference = reference.replace(/v2/g, '')
+    }
+
+    const prices = _.find(this.gpuPrices, gpu => {
+      let gpuName = gpu.label.replace(/ /g, '')
+      if (gpu.entreprise === "AMD") {
+        gpuName = `RX${gpuName}`
+      }
+      return gpuName === reference
+    })
+
+    if (prices) {
+      return (+prices.goodPrice * 1.16).toFixed(2)
+    } else {
+      return null
+    }
   }
 }
